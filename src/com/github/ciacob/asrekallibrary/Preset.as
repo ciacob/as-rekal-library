@@ -2,6 +2,10 @@ package com.github.ciacob.asrekallibrary {
     import com.github.ciacob.asshardlibrary.Shard;
     import com.adobe.crypto.MD5;
     import com.github.ciacob.asshardlibrary.IShard;
+    import flash.filesystem.File;
+    import flash.filesystem.FileStream;
+    import flash.filesystem.FileMode;
+    import flash.utils.ByteArray;
 
     public class Preset {
 
@@ -31,6 +35,42 @@ package com.github.ciacob.asrekallibrary {
         }
 
         /**
+         * Loads a Preset that was previously saved to disk via `toDisk()`.
+         * @param   file
+         *          The file to read the preset from.
+         * @return
+         */
+        public static function fromDisk(file:File):Preset {
+            if (!file || !file.exists) {
+                return null;
+            }
+            try {
+                const stream:FileStream = new FileStream();
+                stream.open(file, FileMode.READ);
+                const bytes:ByteArray = new ByteArray();
+                stream.readBytes(bytes);
+                stream.close();
+
+                // Deserialize into a temporary Shard instance
+                const loaded:Shard = new Shard();
+                loaded.importFrom(bytes);
+
+                const meta:IShard = loaded.getChildAt(0);
+                const settings:IShard = loaded.getChildAt(1);
+
+                // Read-only flag lives under meta; optional
+                const readonlyFlag:* = meta.$get('readonly');
+                const name:String = meta.$get('name');
+                const readonly:Boolean = (readonlyFlag === true);
+
+                return new Preset(name, settings, readonly);
+            } catch (e:Error) {
+                trace('Failed to load preset from file', file ? file.nativePath ? file.nativePath : file : null);
+                return null;
+            }
+        }
+
+        /**
          * Constructs a new Preset instance.
          *
          * @param name
@@ -53,7 +93,7 @@ package com.github.ciacob.asrekallibrary {
             const mustLock:Boolean = (readonly && name && initialSettings);
 
             _data = new Shard;
-            $meta = new DetachedShard((name ? {'name': name} : null), mustLock);
+            $meta = new DetachedShard((name ? {'name': name, 'readonly': mustLock} : null), mustLock);
             $settings = new DetachedShard(initialSettings, mustLock);
             _data.addChild($meta);
             _data.addChild($settings);
@@ -72,6 +112,39 @@ package com.github.ciacob.asrekallibrary {
         public function clone(... readonly):Preset {
             const readonlyState:Boolean = (readonly[0] is Boolean) ? readonly[0] as Boolean : readonly;
             return new Preset(name, settings, readonlyState);
+        }
+
+        /**
+         * Saves a serialized form of this Preset to disk, under given name, optionally overriding.
+         * @param   file
+         *          File to save under. If save is denied (e.g., not writable location), this function
+         *          silently fails and returns `false`. It is recommended that folder access be
+         *          validated externally.
+         *
+         * @param   override
+         *          Optional, default false. If file exists and `override` is `false`, this function
+         *          silently fails and returns `false`. If override fails, `false` is also returned.
+         *
+         * @return  Returns `true` whether saving the Preset to disk succeeded, false otherwise.
+         */
+        public function toDisk(file:File, override:Boolean = false):Boolean {
+            if (!file) {
+                return false;
+            }
+            if (file.exists && !override) {
+                return false;
+            }
+            try {
+                const bytes:ByteArray = _data.toSerialized();
+                const stream:FileStream = new FileStream();
+                stream.open(file, FileMode.WRITE);
+                stream.writeBytes(bytes);
+                stream.close();
+                return true;
+            } catch (e:Error) {
+                trace('Failed to write preset', name, 'to file:', file ? file.nativePath ? file.nativePath : file : null);
+                return false;
+            }
         }
 
         /**
@@ -100,7 +173,7 @@ package com.github.ciacob.asrekallibrary {
          * Indicates whether this Preset is immutable (read-only).
          */
         public function get readonly():Boolean {
-            return $meta.isReadonly;
+            return $meta.$get('readonly') as Boolean;
         }
 
         /**
