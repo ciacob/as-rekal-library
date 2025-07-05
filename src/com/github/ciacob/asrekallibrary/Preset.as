@@ -6,6 +6,7 @@ package com.github.ciacob.asrekallibrary {
     import flash.filesystem.FileStream;
     import flash.filesystem.FileMode;
     import flash.utils.ByteArray;
+    import com.github.ciacob.asshardlibrary.AbstractShard;
 
     public class Preset {
 
@@ -53,7 +54,7 @@ package com.github.ciacob.asrekallibrary {
 
                 // Deserialize into a temporary Shard instance
                 const loaded:Shard = new Shard();
-                loaded.importFrom(bytes);
+                loaded.importFrom(bytes, null, AbstractShard.OOB_FALLBACK);
 
                 const meta:IShard = loaded.getChildAt(0);
                 const settings:IShard = loaded.getChildAt(1);
@@ -65,9 +66,10 @@ package com.github.ciacob.asrekallibrary {
 
                 return new Preset(name, settings, readonly);
             } catch (e:Error) {
-                trace('Failed to load preset from file', file ? file.nativePath ? file.nativePath : file : null);
+                trace('Failed to load preset from file', file ? file.nativePath ? file.nativePath : file : null, e);
                 return null;
             }
+            return null;
         }
 
         /**
@@ -145,6 +147,7 @@ package com.github.ciacob.asrekallibrary {
                 trace('Failed to write preset', name, 'to file:', file ? file.nativePath ? file.nativePath : file : null);
                 return false;
             }
+            return false;
         }
 
         /**
