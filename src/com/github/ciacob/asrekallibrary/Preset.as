@@ -7,8 +7,12 @@ package com.github.ciacob.asrekallibrary {
     import flash.filesystem.FileMode;
     import flash.utils.ByteArray;
     import com.github.ciacob.asshardlibrary.AbstractShard;
+    import flash.events.EventDispatcher;
+    import com.github.ciacob.asrekallibrary.events.PresetEvent;
+    import flash.events.Event;
+    import flash.events.IOErrorEvent;
 
-    public class Preset {
+    public class Preset extends EventDispatcher {
 
         /**
          * Internal storage medium with built-in ByteArray serialization support
@@ -38,7 +42,7 @@ package com.github.ciacob.asrekallibrary {
         /**
          * Loads a Preset that was previously saved to disk via `toDisk()`.
          * @param   file
-         *          The file to read the preset from.
+         *          The file to read the Preset from.
          * @return
          */
         public static function fromDisk(file:File):Preset {
@@ -71,6 +75,83 @@ package com.github.ciacob.asrekallibrary {
             }
             return null;
         }
+
+        /**
+         * Asynchronous variant of `fromDiskAsync`, to leverage AIR true asynchronous disk access API.
+         * This variant does not return a value; use the events emitted by the given `file` instead
+         * (provided it is not null; if that is the case, the method will throw).
+         *
+         * @param   file
+         *          The file to read the Preset from.
+         *
+         * @throws  If `file` is null or not given, throws an `ArgumentError`.
+         *
+         * @eventType   PresetEvent - PresetEvent.ERROR
+         *              Dispatched when:
+         *              - Given `file` does not exist on disk, or
+         *              - Reading the given `file` failed, or
+         *              - Creating a Preset out of the read file failed.
+         *              In all cases, the event's `data` property contains information.
+         *
+         * @eventType   PresetEvent - PresetEvent.LOADED
+         *              Dispatched when given file was successfully read from disk AND a Preset
+         *              has been successfully created from it. The event's `data` property will
+         *              be set to the newly created Preset.
+         */
+        public static function fromDiskAsync(file:File):* {
+            if (!file) {
+                throw new ArgumentError("fromDiskAsync() requires a non-null File.");
+            }
+
+            const stream:FileStream = new FileStream();
+            const bytes:ByteArray = new ByteArray();
+
+            const errOut:Function = function(msg:String):void {
+                file.dispatchEvent(new PresetEvent(PresetEvent.ERROR, {reason: msg}, true));
+            }
+
+            const unbind:Function = function():void {
+                stream.removeEventListener(Event.COMPLETE, onReadComplete);
+                stream.removeEventListener(IOErrorEvent.IO_ERROR, onReadFail);
+                stream.close();
+            }
+
+            const onReadComplete:Function = function(e:Event):void {
+                unbind();
+                try {
+                    stream.readBytes(bytes);
+                    const loaded:Shard = new Shard();
+                    loaded.importFrom(bytes, null, AbstractShard.OOB_FALLBACK);
+                    const meta:IShard = loaded.getChildAt(0);
+                    const settings:IShard = loaded.getChildAt(1);
+                    const readonly:Boolean = (meta.$get("readonly") === true);
+                    const name:String = meta.$get("name");
+                    const preset:Preset = new Preset(name, settings, readonly);
+                    file.dispatchEvent(new PresetEvent(PresetEvent.LOADED, preset));
+                } catch (e:Error) {
+                    errOut(e.message);
+                }
+            };
+
+            const onReadFail:Function = function(e:IOErrorEvent):void {
+                unbind();
+                errOut(e.text);
+            };
+
+            if (!file.exists) {
+                return errOut('File does not exist');
+            }
+
+            try {
+                stream.addEventListener(Event.COMPLETE, onReadComplete);
+                stream.addEventListener(IOErrorEvent.IO_ERROR, onReadFail);
+                stream.openAsync(file, FileMode.READ);
+            } catch (e:Error) {
+                unbind();
+                errOut(e.message);
+            }
+        }
+
 
         /**
          * Constructs a new Preset instance.
@@ -148,6 +229,71 @@ package com.github.ciacob.asrekallibrary {
                 return false;
             }
             return false;
+        }
+
+        /**
+         * Asynchronous variant of `toDisk`, to leverage AIR true asynchronous disk access API.
+         * This variant does not return a value; use the events emitted by the Preset class instead.
+         *
+         * @param   file
+         *          File to save under.
+         *
+         * @param   overwrite
+         *          Optional, default false. Whether to overwrite an existing file.
+         *
+         * @eventType   PresetEvent - PresetEvent.ERROR
+         *              Dispatched when:
+         *              - given `file` is invalid, or
+         *              - given file exists and `overwrite` was not given, or
+         *              - attempting to save the file failed, or
+         *              - any other type of error occurred.
+         *              In all cases, the event's `data` property contains information.
+         *
+         * @eventType   PresetEvent - PresetEvent.SAVED
+         *              Dispatched when a file was successfully saved. The event's `data`
+         *              property will be set to the saved file.
+         */
+        public function toDiskAsync(file:File, overwrite:Boolean = false):* {
+            const stream:FileStream = new FileStream();
+
+            const errOut:Function = function(msg:String):void {
+                dispatchEvent(new PresetEvent(PresetEvent.ERROR, {reason: msg}, true));
+            }
+
+            const unbind:Function = function():void {
+                stream.removeEventListener(Event.CLOSE, onWriteComplete);
+                stream.removeEventListener(IOErrorEvent.IO_ERROR, onWriteFail);
+                stream.close();
+            }
+
+            const onWriteComplete:Function = function(e:Event):void {
+                unbind();
+                dispatchEvent(new PresetEvent(PresetEvent.SAVED, file));
+            };
+
+            const onWriteFail:Function = function(e:IOErrorEvent):void {
+                unbind();
+                errOut(e.text);
+            };
+
+            if (!file) {
+                return errOut('Given file is invalid.');
+            }
+            if (file.exists && !overwrite) {
+                return errOut('File exists and not overwriting.');
+            }
+
+            const bytes:ByteArray = _data.toSerialized();
+            try {
+                stream.addEventListener(Event.CLOSE, onWriteComplete);
+                stream.addEventListener(IOErrorEvent.IO_ERROR, onWriteFail);
+                stream.openAsync(file, FileMode.WRITE);
+                stream.writeBytes(bytes);
+
+            } catch (e:Error) {
+                unbind();
+                errOut(e.message);
+            }
         }
 
         /**
