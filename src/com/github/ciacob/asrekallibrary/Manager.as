@@ -7,6 +7,7 @@ package com.github.ciacob.asrekallibrary {
     import flash.events.IOErrorEvent;
     import com.github.ciacob.asshardlibrary.IShard;
     import com.github.ciacob.asshardlibrary.Shard;
+    import flash.events.Event;
 
     public class Manager extends EventDispatcher {
 
@@ -79,7 +80,7 @@ package com.github.ciacob.asrekallibrary {
                 }
                 const preset:Preset = Preset.fromDisk(file);
                 if (preset) {
-                    if (!filter || filter(preset)) {
+                    if (filter === null || filter(preset)) {
                         result.push(preset);
                     }
                 }
@@ -367,7 +368,7 @@ package com.github.ciacob.asrekallibrary {
          *          Optional. If `false` (default), denies saving if a Preset with the same `name`
          *          already exists. If `true`, such a Preset is silently overwritten, provided
          *          not read-only.
-         * 
+         *
          * @eventType   PresetEvent - PresetEvent.ERROR
          *              Dispatched when:
          *              - Saving the Preset failed, or
@@ -379,19 +380,19 @@ package com.github.ciacob.asrekallibrary {
          *                unicity; save was aborted).
          *              In all these cases, the `data` property of the event is an Object that contains an
          *              error code and a textual representation.
-         * 
+         *
          * @eventType   PresetEvent - PresetEvent.SET_COMPLETE
          *              Dispatched when:
          *              - Saving the Preset succeeded, or
          *              - There was no need to save (because an identical Preset was found to exist).
          *              In both cases, the `data` property of the event is an Object with a numeric code and
          *              a Preset instance for immediate use.
-         * 
+         *
          * Note: see `$set` for the numeric codes in use.
          */
         public function $setAsync(data:*, name:String, overwrite:Boolean = false):* {
             var existingPreset:Preset = null;
-            var preset:Preset;
+            var preset:Preset = null;
 
             // Helper: dispatches error events
             const errOut:Function = function(code:int, message:String):void {
@@ -483,7 +484,153 @@ package com.github.ciacob.asrekallibrary {
                 addEventListener(PresetEvent.LIST_COMPLETE, onListingDone);
                 listAsync();
             } else {
-                onListingDone ();
+                onListingDone();
+            }
+        }
+
+        /**
+         * Synchronously deletes a Preset from disk.
+         * Uses `lookup` under the hood, which may use `list` if needed.
+         * @see list
+         * @see lookup
+         *
+         * @param   criteria
+         *          A value to internally look up, prior to deletion. Can be:
+         *          - A `Preset` instance: match is based on `hash`.
+         *          - A `Shard` or plain `Object`: interpreted as settings, match is based on `hash`.
+         *          - A `String`: interpreted as the `name` of the Preset.
+         *          Note that `$delete` only affects Presets that exist on disk. Providing a newly-created,
+         *          no-yet-stored Preset will have no effect.
+         *
+         * @return Returns a numeric code representing the outcome:
+         *         - `1`  if deletion succeeded.
+         *         - `0`  if no matching stored Preset was found (nothing to delete).
+         *         - `-1` if the Preset is read-only.
+         *         - `-2` if deletion failed due to I/O or any other error.
+         */
+        public function $delete(criteria:*):int {
+            const preset:Preset = lookup(criteria as String, _lastListed);
+
+            // Early exit: we could not resolve `criteria` to a stored Preset.
+            if (!preset) {
+                return 0;
+            }
+
+            // Early exit: the Preset `criteria` resolved to was readonly.
+            if (preset.readonly) {
+                return -1;
+            }
+
+            const fileName:String = preset.hash + "_" + preset.name;
+            const file:File = _homeDir.resolvePath(fileName);
+            try {
+                file.deleteFile(); // Will throw if fails
+
+                // Shortcut: update the cache directly
+                if (_lastListed) {
+                    const index:int = _lastListed.indexOf(preset);
+                    if (index >= 0) {
+                        _lastListed.splice(index, 1);
+                    }
+                }
+                return 1;
+            } catch (e:Error) {
+                trace("Deletion failed:", e.message);
+                return -2;
+            }
+
+            // We can only get down here in error
+            return -2;
+        }
+
+        /**
+         * Asynchronously deletes a Preset from disk. Emits events to signal the outcome.
+         *
+         * @param nameOrPreset Either the name of the Preset to delete (String), or a Preset instance.
+         *
+         * @eventType PresetEvent.SET_COMPLETE
+         *            Dispatched when deletion completes. The event's `data` includes:
+         *            - `code` = 1 if deleted, 0 if not found.
+         *            - `preset` = the Preset (if found).
+         *
+         * @eventType PresetEvent.ERROR
+         *            Dispatched when deletion fails (read-only or I/O error). The `data` includes:
+         *            - `code` = -1 (read-only) or -2 (file system error),
+         *            - `reason` = explanation
+         */
+        public function $deleteAsync(nameOrPreset:*):* {
+            var file:File = new File;
+            var preset:Preset = null;
+
+            // Helper: dispatches error events
+            const errOut:Function = function(code:int, message:String):void {
+                dispatchEvent(new PresetEvent(PresetEvent.ERROR, {code: code, reason: message}, true));
+            }
+
+            // Helper: releases event listeners
+            const unbind:Function = function():void {
+                file.removeEventListener(Event.COMPLETE, onDeleted);
+                file.removeEventListener(IOErrorEvent.IO_ERROR, onError);
+                removeEventListener(PresetEvent.ERROR, onListingFailed);
+                removeEventListener(PresetEvent.LIST_COMPLETE, onListingDone);
+            }
+
+            // Listener: executed when a Preset file has been successfully removed from disk
+            const onDeleted:Function = function():void {
+                unbind();
+                if (_lastListed) {
+                    const index:int = _lastListed.indexOf(preset);
+                    if (index >= 0) {
+                        _lastListed.splice(index, 1);
+                    }
+                }
+                dispatchEvent(new PresetEvent(PresetEvent.SET_COMPLETE, {code: 1, preset: preset}));
+            };
+
+            // Listener: executed when a Preset file removal has failed (e.g., security errors)
+            const onError:Function = function(e:IOErrorEvent):void {
+                unbind();
+                errOut(-2, e.text)
+            };
+
+            // Listener: executed when listing the known presets failed
+            const onListingFailed:Function = function(event:PresetEvent):void {
+                unbind();
+                errOut(-2, event.data || "Listing failed before delete attempt.");
+            }
+
+            // Listener: executed when listing the known presets completed. Also called directly
+            // if a cached list of Presets was already available.
+            const onListingDone:Function = function(event:PresetEvent):* {
+                preset = lookup(nameOrPreset as String, _lastListed);
+                if (!preset) {
+                    dispatchEvent(new PresetEvent(PresetEvent.SET_COMPLETE, {code: 0, preset: null}));
+                    return;
+                }
+                if (preset.readonly) {
+                    return errOut(-1, "Preset is read-only");
+                }
+
+                const fileName:String = preset.hash + "_" + preset.name;
+                file = _homeDir.resolvePath(fileName);
+                try {
+                    file.addEventListener(Event.COMPLETE, onDeleted);
+                    file.addEventListener(IOErrorEvent.IO_ERROR, onError);
+                    file.deleteFileAsync();
+                } catch (e:Error) {
+                    onError(new IOErrorEvent(IOErrorEvent.IO_ERROR, false, false, e.message));
+                }
+            }
+
+
+            // MAIN LOGIC
+            // Ensure we have a list of known Presets to operate on
+            if (!_lastListed) {
+                addEventListener(PresetEvent.ERROR, onListingFailed);
+                addEventListener(PresetEvent.LIST_COMPLETE, onListingDone);
+                listAsync();
+            } else {
+                onListingDone();
             }
         }
 
