@@ -327,11 +327,11 @@ package com.github.ciacob.asrekallibrary {
 
         /**
          * Returns an MD5 digest of this Preset's user settings, uniquely identifying
-         * the Preset by content, not metadata.
-         * Note: this is computed on each call; client code is encourages to cache.
+         * the Preset by content, not metadata or class/type.
+         * Notes:this is computed on each call; client code is encourages to cache.
          */
         public function get hash():String {
-            return MD5.hashBytes($settings.toSerialized());
+            return MD5.hashBytes($settings.toSerialized(true));
         }
 
         /**

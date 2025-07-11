@@ -125,7 +125,7 @@ package com.github.ciacob.asrekallibrary {
                 for (var key:String in criteria) {
                     temp.$set(key, criteria[key]);
                 }
-                return preset.hash === MD5.hashBytes(temp.toSerialized());
+                return preset.hash === MD5.hashBytes(temp.toSerialized(true));
             }
             return false;
         }
