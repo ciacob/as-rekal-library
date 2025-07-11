@@ -117,7 +117,6 @@ package com.github.ciacob.asrekallibrary {
             }
 
             const onReadComplete:Function = function(e:Event):void {
-                unbind();
                 try {
                     stream.readBytes(bytes);
                     const loaded:Shard = new Shard();
@@ -127,8 +126,10 @@ package com.github.ciacob.asrekallibrary {
                     const readonly:Boolean = (meta.$get("readonly") === true);
                     const name:String = meta.$get("name");
                     const preset:Preset = new Preset(name, settings, readonly);
+                    unbind();
                     file.dispatchEvent(new PresetEvent(PresetEvent.LOADED, preset));
                 } catch (e:Error) {
+                    unbind();
                     errOut(e.message);
                 }
             };
@@ -261,12 +262,11 @@ package com.github.ciacob.asrekallibrary {
             }
 
             const unbind:Function = function():void {
-                stream.removeEventListener(Event.CLOSE, onWriteComplete);
+                stream.removeEventListener(Event.CLOSE, onWriteDone);
                 stream.removeEventListener(IOErrorEvent.IO_ERROR, onWriteFail);
-                stream.close();
             }
 
-            const onWriteComplete:Function = function(e:Event):void {
+            const onWriteDone:Function = function(e:Event):void {
                 unbind();
                 dispatchEvent(new PresetEvent(PresetEvent.SAVED, file));
             };
@@ -285,11 +285,11 @@ package com.github.ciacob.asrekallibrary {
 
             const bytes:ByteArray = _data.toSerialized();
             try {
-                stream.addEventListener(Event.CLOSE, onWriteComplete);
+                stream.addEventListener(Event.CLOSE, onWriteDone);
                 stream.addEventListener(IOErrorEvent.IO_ERROR, onWriteFail);
                 stream.openAsync(file, FileMode.WRITE);
                 stream.writeBytes(bytes);
-
+                stream.close();
             } catch (e:Error) {
                 unbind();
                 errOut(e.message);

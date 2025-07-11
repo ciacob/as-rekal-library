@@ -117,15 +117,15 @@ package com.github.ciacob.asrekallibrary {
             if (criteria is IShard) {
                 return preset.hash === MD5.hashBytes((criteria as IShard).toSerialized());
             }
+            if (criteria is String) {
+                return preset.name === criteria;
+            }
             if (criteria is Object) {
                 const temp:Shard = new Shard();
                 for (var key:String in criteria) {
                     temp.$set(key, criteria[key]);
                 }
                 return preset.hash === MD5.hashBytes(temp.toSerialized());
-            }
-            if (criteria is String) {
-                return preset.name === criteria;
             }
             return false;
         }
