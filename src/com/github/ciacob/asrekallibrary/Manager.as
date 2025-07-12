@@ -425,7 +425,7 @@ package com.github.ciacob.asrekallibrary {
 
             // Listener: executed when listing the known presets completed. Also called directly
             // if a cached list of Presets was already available.
-            const onListingDone:Function = function(event:PresetEvent):* {
+            const onListingDone:Function = function(...ignore):* {
                 unbind();
                 existingPreset = lookup(name, _lastListed);
                 if (existingPreset) {
@@ -601,7 +601,7 @@ package com.github.ciacob.asrekallibrary {
 
             // Listener: executed when listing the known presets completed. Also called directly
             // if a cached list of Presets was already available.
-            const onListingDone:Function = function(event:PresetEvent):* {
+            const onListingDone:Function = function(...ignore):* {
                 preset = lookup(nameOrPreset as String, _lastListed);
                 if (!preset) {
                     dispatchEvent(new PresetEvent(PresetEvent.SET_COMPLETE, {code: 0, preset: null}));
