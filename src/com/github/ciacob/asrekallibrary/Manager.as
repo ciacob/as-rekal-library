@@ -115,7 +115,7 @@ package com.github.ciacob.asrekallibrary {
                 return preset.hash === (criteria as Preset).hash;
             }
             if (criteria is IShard) {
-                return preset.hash === MD5.hashBytes((criteria as IShard).toSerialized());
+                return preset.hash === MD5.hashBytes((criteria as IShard).toSerialized(true));
             }
             if (criteria is String) {
                 return preset.name === criteria;
