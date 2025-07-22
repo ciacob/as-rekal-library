@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API -->
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009"
+    xmlns:s="library://ns.adobe.com/flex/spark"
+    xmlns:mx="library://ns.adobe.com/flex/mx"
+    width="100%" height="100%">
+
+    <fx:Script>
+        <![CDATA[
+            import com.github.ciacob.asrekallibrary.Manager;
+            import com.github.ciacob.asrekallibrary.Preset;
+            import com.github.ciacob.asrekallibrary.events.PresetEvent;
+            import mx.collections.ArrayCollection;
+            import mx.utils.ObjectUtil;
+            import com.github.ciacob.asshardlibrary.Shard;
+            
+            [Bindable]
+            public var manager:Manager;
+            [Bindable]
+            private var presets:ArrayCollection = new ArrayCollection;
+            [Bindable]
+            private var currentPreset:Preset;
+            [Bindable]
+            private var readOnlyStatus:Boolean;
+            [Bindable]
+            private var statusMessage:String = "";
+            
+            public function initializeWith(manager:Manager):void {
+                this.manager = manager;
+                refreshList();
+            }
+            
+            private function refreshList():void {
+                if (!statusMessage) {
+                    statusMessage = "Loading presets...";
+                }
+                manager.addEventListener(PresetEvent.LIST_COMPLETE, onList);
+                manager.listAsync();
+            }
+            
+            private function onList(e:PresetEvent):void {
+                manager.removeEventListener(PresetEvent.LIST_COMPLETE, onList);
+                presets.removeAll();
+                const rawPresets:Vector.<Preset> = (e.data as Vector.<Preset>);
+                for (var i:int = 0; i < rawPresets.length; i++) {
+                    presets.addItem(rawPresets[i]);
+                }
+                if (statusMessage === "Loading presets...") {
+                    statusMessage = presets.length + " presets loaded.";
+                }
+            }
+            
+            private function onSaveClick():void {
+                const name:String = nameInput.text;
+                if (!name) {
+                    return;
+                }
+            
+                // A `PresetEvent.SAVING` event is dispatched when user clicks "Save". Its `data` is an Object
+                // with a `commit()` closure. Client code must listen for this event and call the closure,
+                // passing it the data to save (see `$set()` in class Manager for supported data types).
+                dispatchEvent(new PresetEvent(PresetEvent.SAVING, {
+                                commit: function(dataToSave:Object):void {
+                                    if (!dataToSave) {
+                                        return;
+                                    }
+                                    manager.addEventListener(PresetEvent.SET_COMPLETE, onSaved);
+                                    manager.$setAsync(dataToSave, name);
+                                }
+                            }, true));
+            }
+            
+            private function onSaved(e:PresetEvent):void {
+                manager.removeEventListener(PresetEvent.SET_COMPLETE, onSaved);
+                statusMessage = "Preset saved: " + e.data.preset.name;
+                refreshList();
+            }
+            
+            private function onDeleteClick():void {
+                if (!currentPreset || currentPreset.readonly) {
+                    return;
+                }
+                trace('---> about to delete preset:', currentPreset);
+                manager.addEventListener(PresetEvent.DELETE_COMPLETE, onDelOpExecuted);
+                manager.$deleteAsync(currentPreset);
+            }
+            
+            private function onDelOpExecuted(e:PresetEvent):void {
+                trace('---> preset deleted');
+            
+                manager.removeEventListener(PresetEvent.DELETE_COMPLETE, onDelOpExecuted);
+            
+                if (e.data && e.data.code === 1) {
+                    statusMessage = "Deleted preset.";
+                    refreshList();
+                    return;
+                }
+            
+                statusMessage = "Preset not found.";
+            }
+            
+            private function onPresetChanged():void {
+                currentPreset = presetList.selectedItem as Preset;
+                dispatchEvent(new PresetEvent(PresetEvent.CHANGE, currentPreset, true));
+                if (currentPreset) {
+                    readOnlyStatus = currentPreset.readonly;
+                }
+            }
+        ]]>
+    </fx:Script>
+
+    <s:VGroup width="100%" gap="8" padding="8">
+        <s:Label text="Presets:" fontWeight="bold"/>
+        <s:ComboBox width="100%" id="presetList"
+            dataProvider="{presets}"
+            labelField="name"
+            change="onPresetChanged()"/>
+
+        <s:HGroup width="100%" gap="8">
+            <s:Button label="Delete" enabled="{currentPreset &amp;&amp; !readOnlyStatus}"
+                click="onDeleteClick()"/>
+            <s:Button label="Save" click="onSaveClick()"/>
+        </s:HGroup>
+
+        <s:TextInput width="100%" id="nameInput" prompt="Enter preset name"/>
+        <s:Label text="{statusMessage}" fontStyle="italic"/>
+    </s:VGroup>
+</s:Group>

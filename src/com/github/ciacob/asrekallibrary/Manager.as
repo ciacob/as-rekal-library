@@ -548,7 +548,7 @@ package com.github.ciacob.asrekallibrary {
          *
          * @param nameOrPreset Either the name of the Preset to delete (String), or a Preset instance.
          *
-         * @eventType PresetEvent.SET_COMPLETE
+         * @eventType PresetEvent.DELETE_COMPLETE
          *            Dispatched when deletion completes. The event's `data` includes:
          *            - `code` = 1 if deleted, 0 if not found.
          *            - `preset` = the Preset (if found).
@@ -584,7 +584,7 @@ package com.github.ciacob.asrekallibrary {
                         _lastListed.splice(index, 1);
                     }
                 }
-                dispatchEvent(new PresetEvent(PresetEvent.SET_COMPLETE, {code: 1, preset: preset}));
+                dispatchEvent(new PresetEvent(PresetEvent.DELETE_COMPLETE, {code: 1, preset: preset}));
             };
 
             // Listener: executed when a Preset file removal has failed (e.g., security errors)
@@ -602,9 +602,9 @@ package com.github.ciacob.asrekallibrary {
             // Listener: executed when listing the known presets completed. Also called directly
             // if a cached list of Presets was already available.
             const onListingDone:Function = function(...ignore):* {
-                preset = lookup(nameOrPreset as String, _lastListed);
+                preset = lookup(nameOrPreset, _lastListed);
                 if (!preset) {
-                    dispatchEvent(new PresetEvent(PresetEvent.SET_COMPLETE, {code: 0, preset: null}));
+                    dispatchEvent(new PresetEvent(PresetEvent.DELETE_COMPLETE, {code: 0, preset: null}));
                     return;
                 }
                 if (preset.readonly) {

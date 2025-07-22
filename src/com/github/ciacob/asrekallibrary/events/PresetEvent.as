@@ -11,6 +11,9 @@ package com.github.ciacob.asrekallibrary.events {
         public static const LOADED:String = "presetLoaded";
 
         public static const ERROR:String = "presetManagerError";
+        public static const CHANGE:String = "presetManagerChange";
+
+        public static const SAVING:String = "presetUiSaving";
 
         private var _data:*;
 
