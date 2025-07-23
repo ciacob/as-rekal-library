@@ -226,7 +226,7 @@
              */
             private function _onSaved(e:PresetEvent):void {
             
-                // Safeguard: should not be tha case, but should not crash parent application
+                // Safeguard: should not be the case, but should not crash parent application
                 // if anything bad happens.
                 if (!e || !e.data || !e.data.hasOwnProperty('code') || !e.data.preset) {
                     _setStatus("Internal error while saving.");
@@ -328,8 +328,8 @@
         ]]>
     </fx:Script>
 
-    <s:VGroup width="100%" gap="{getStyle('vGap')}"
-        paddingLeft="{getStyle('padding') || 0}"
+    <s:VGroup width="100%" gap="{getStyle('vGap') || 0}"
+        padding="{getStyle('padding') || 0}"
         paddingLeft="{getStyle('paddingLeft') || 0}"
         paddingRight="{getStyle('paddingRight') || 0}"
         paddingTop="{getStyle('paddingTop') || 0}"
@@ -340,7 +340,7 @@
             visible="{showHeader}"
             includeInLayout="{showHeader}"/>
 
-        <s:HGroup width="100%" gap="{getStyle('hGap')}">
+        <s:HGroup width="100%" gap="{getStyle('hGap') || 0}">
             <s:ComboBox width="100%" id="presetList"
                 maxChars="{_numChars}"
                 prompt="{promptText}"
