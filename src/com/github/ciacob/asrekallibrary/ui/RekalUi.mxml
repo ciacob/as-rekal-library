@@ -10,49 +10,148 @@
             import com.github.ciacob.asrekallibrary.Manager;
             import com.github.ciacob.asrekallibrary.Preset;
             import com.github.ciacob.asrekallibrary.events.PresetEvent;
+            import spark.components.ComboBox;
             import mx.collections.ArrayCollection;
-            import mx.utils.ObjectUtil;
-            import com.github.ciacob.asshardlibrary.Shard;
+            
+            /**
+             * Set to `true` to have current selection maintained past a Save operation.
+             */
+            [Bindable]
+            public var keepSelection:Boolean = true;
+            
+            /**
+             * Time before status message clears itself, in seconds. Set to 0 to disable.
+             */
+            [Bindable]
+            public var statusTimeOut:int = 3;
             
             [Bindable]
-            public var manager:Manager;
-            [Bindable]
-            private var presets:ArrayCollection = new ArrayCollection;
-            [Bindable]
-            private var currentPreset:Preset;
-            [Bindable]
-            private var readOnlyStatus:Boolean;
-            [Bindable]
-            private var statusMessage:String = "";
+            private var _presets:ArrayCollection = new ArrayCollection;
             
+            [Bindable]
+            private var _statusMsg:String = "";
+            
+            [Bindable]
+            private var _numChars:uint = 40;
+            
+            private var _rawPresets:Vector.<Preset> = new Vector.<Preset>;
+            
+            private var _manager:Manager;
+            
+            private var _presetToPersist:Preset;
+            
+            private var _statusTimer:Timer;
+            
+            /**
+             * Connects this UI component to a Manager instance. Connection is "hot",
+             * meaning that the changes you operate on the Manager instance directly
+             * will be reflected here in due time.
+             *
+             * Note: you MUST connect to a Manager in order to be able to use this
+             * component.
+             */
             public function initializeWith(manager:Manager):void {
-                this.manager = manager;
-                refreshList();
+                this._manager = manager;
+                if (!_manager) {
+                    return;
+                };
+                this._numChars = manager.labelMaxLength;
+                _updateList();
             }
             
-            private function refreshList():void {
-                if (!statusMessage) {
-                    statusMessage = "Loading presets...";
+            /**
+             * Sets status with a delay for auto-clearing itself.
+             */
+            private function _setStatus(msg:String):void {
+                _statusMsg = msg;
+                if (!statusTimeOut) {
+                    return;
                 }
-                manager.addEventListener(PresetEvent.LIST_COMPLETE, onList);
-                manager.listAsync();
+                const onTimerComplete:Function = function():void {
+                    _statusMsg = "";
+                    _statusTimer.removeEventListener(TimerEvent.TIMER_COMPLETE, onTimerComplete);
+                    _statusTimer = null;
+                };
+                if (_statusTimer) {
+                    _statusTimer.reset();
+                }
+                else {
+                    _statusTimer = new Timer(statusTimeOut * 1000, 1);
+                    _statusTimer.addEventListener(TimerEvent.TIMER_COMPLETE, onTimerComplete);
+                }
+                _statusTimer.start();
             }
             
-            private function onList(e:PresetEvent):void {
-                manager.removeEventListener(PresetEvent.LIST_COMPLETE, onList);
-                presets.removeAll();
-                const rawPresets:Vector.<Preset> = (e.data as Vector.<Preset>);
-                for (var i:int = 0; i < rawPresets.length; i++) {
-                    presets.addItem(rawPresets[i]);
+            /**
+             * Causes buttons to become available based on specific criteria.
+             */
+            private function _updateButtons():void {
+                const canDelete:Boolean = (presetList.selectedIndex > ComboBox.CUSTOM_SELECTED_ITEM &&
+                        presetList.selectedItem &&
+                        !presetList.selectedItem.readonly);
+                const canSave:Boolean = !!presetList.selectedItem;
+                deleteButton.enabled = canDelete;
+                saveButton.enabled = canSave;
+            }
+            
+            /**
+             * Helper, trims a string. Returns an empty string for `null`.
+             */
+            private function _trim(str:String):String {
+                if (!str) {
+                    return '';
                 }
-                if (statusMessage === "Loading presets...") {
-                    statusMessage = presets.length + " presets loaded.";
+                return str.replace(/^\s+|\s+$/g, '');
+            }
+            
+            /**
+             * Puts read-only presets firsts, alphabetically sorted, then the rest of the presets,
+             * also alphabetically sorted.
+             */
+            private function _defaultSort(a:Preset, b:Preset):int {
+                const byName:int = a.name.localeCompare(b.name);
+                return (b.readonly as int) - (a.readonly as int) || byName;
+            }
+            
+            /**
+             * Causes the list to be asynchronously rebuilt, picking up all changes, and
+             * optionally restoring previous selection.
+             */
+            private function _updateList():void {
+                if (!_manager) {
+                    return;
+                };
+                _manager.addEventListener(PresetEvent.LIST_COMPLETE, _onListComplete);
+                _manager.listAsync(null, _defaultSort);
+            }
+            
+            /**
+             * Executed when the manager finished its asynchronous listing and we can start
+             * repopulating the ComboBox. We cache received data for synchronous local lookups.
+             */
+            private function _onListComplete(e:PresetEvent):void {
+                _manager.removeEventListener(PresetEvent.LIST_COMPLETE, _onListComplete);
+                _presets.removeAll();
+                _rawPresets = (e.data as Vector.<Preset>);
+                if (_rawPresets) {
+                    for (var i:int = 0; i < _rawPresets.length; i++) {
+                        const preset:Preset = _rawPresets[i];
+                        _presets.addItem(preset);
+                    }
+            
+                    if (_presetToPersist && keepSelection) {
+                        presetList.selectedItem = _presetToPersist;
+                        _presetToPersist = null;
+                        _updateButtons();
+                    }
                 }
             }
             
-            private function onSaveClick():void {
-                const name:String = nameInput.text;
-                if (!name) {
+            /**
+             * Executed when user clicks "Save".
+             */
+            private function _onSaveClick():void {
+                if (!_manager || !presetList.selectedItem) {
                     return;
                 }
             
@@ -64,65 +163,141 @@
                                     if (!dataToSave) {
                                         return;
                                     }
-                                    manager.addEventListener(PresetEvent.SET_COMPLETE, onSaved);
-                                    manager.$setAsync(dataToSave, name);
+                                    _manager.addEventListener(PresetEvent.SET_COMPLETE, _onSaved);
+                                    _manager.$setAsync(dataToSave, presetList.selectedItem.name, true);
                                 }
                             }, true));
             }
             
-            private function onSaved(e:PresetEvent):void {
-                manager.removeEventListener(PresetEvent.SET_COMPLETE, onSaved);
-                statusMessage = "Preset saved: " + e.data.preset.name;
-                refreshList();
-            }
+            /**
+             * Executed when the manager has finished asynchronously storing client-provided data.
+             */
+            private function _onSaved(e:PresetEvent):void {
             
-            private function onDeleteClick():void {
-                if (!currentPreset || currentPreset.readonly) {
+                // Safeguard: should not be tha case, but should not crash parent application
+                // if anything bad happens.
+                if (!e || !e.data || !e.data.hasOwnProperty('code') || !e.data.preset) {
+                    _setStatus("Internal error while saving.");
                     return;
                 }
-                trace('---> about to delete preset:', currentPreset);
-                manager.addEventListener(PresetEvent.DELETE_COMPLETE, onDelOpExecuted);
-                manager.$deleteAsync(currentPreset);
+                const data:Object = e.data;
+                const code:int = data.code;
+                const preset:Preset = data.preset;
+                const name:String = preset.name;
+                _presetToPersist = preset;
+            
+                _manager.removeEventListener(PresetEvent.SET_COMPLETE, _onSaved);
+            
+                switch (code) {
+                    case 1:
+                        _setStatus("Preset saved: " + name);
+                        _updateList();
+                        break;
+                    case 0:
+                        _setStatus("Identical preset exists: " + name);
+                        break;
+                    case 2:
+                        _setStatus("Updated preset: " + name);
+                        _updateList();
+                        break;
+                }
             }
             
-            private function onDelOpExecuted(e:PresetEvent):void {
-                trace('---> preset deleted');
+            /**
+             * Executed when user clicks "Delete".
+             */
+            private function _onDeleteClick():void {
+                if (!_manager || !presetList.selectedItem || presetList.selectedItem.readonly) {
+                    return;
+                }
+                _manager.addEventListener(PresetEvent.DELETE_COMPLETE, _onDelOpExecuted);
+                _manager.$deleteAsync(presetList.selectedItem);
+            }
             
-                manager.removeEventListener(PresetEvent.DELETE_COMPLETE, onDelOpExecuted);
-            
+            /**
+             * Executed when manager finished asynchronously deleting given preset.
+             */
+            private function _onDelOpExecuted(e:PresetEvent):void {
+                _manager.removeEventListener(PresetEvent.DELETE_COMPLETE, _onDelOpExecuted);
                 if (e.data && e.data.code === 1) {
-                    statusMessage = "Deleted preset.";
-                    refreshList();
+                    _setStatus("Deleted preset: " + e.data.preset.name);
+                    _updateList();
                     return;
                 }
             
-                statusMessage = "Preset not found.";
+                // Safeguard: odds are remote, but let's cover that as well.
+                _setStatus("Preset not found.");
             }
             
-            private function onPresetChanged():void {
-                currentPreset = presetList.selectedItem as Preset;
-                dispatchEvent(new PresetEvent(PresetEvent.CHANGE, currentPreset, true));
-                if (currentPreset) {
-                    readOnlyStatus = currentPreset.readonly;
+            /**
+             * Executed when user causes the currently selected preset to change, either via
+             * mouse or keyboard. Sends to the outer world the current Preset.
+             */
+            private function _onPresetChanged():void {
+                if (!_manager) {
+                    return;
+                };
+                if (presetList.selectedItem) {
+            
+                    // We only notify the outer world when an *existing* Preset has been selected.
+                    // Otherwise, the user would be unable to save the content of existing Presets
+                    // under new names (because entering the desired new name would instantly replace
+                    // the existing preset's content with the new Preset's, which would be nill).
+                    if (presetList.selectedIndex >= 0) {
+                        dispatchEvent(new PresetEvent(PresetEvent.CHANGE, presetList.selectedItem, true));
+                        _setStatus('Applied preset: ' + presetList.selectedItem.name);
+                    }
                 }
+            
+                _updateButtons();
+            }
+            
+            /**
+             * Called by the ComboBox component when it has been committed a free text that it
+             * cannot resolve to an existing Preset. We transparently resolve the text to a Preset
+             * and return it (to be later subjected to `_onPresetChanged`).
+             */
+            private function _labelToItem(input:String):* {
+                if (!_manager) {
+                    return;
+                };
+            
+                // The manager errors on empty preset names, so we stop this short.
+                input = _trim(input);
+                if (!input) {
+                    return null;
+                }
+            
+                // Safeguard: maybe component wrongly saw an existing Preset's name as being new...
+                const existingPreset:Preset = _manager.lookup(input, _rawPresets);
+            
+                return existingPreset || new Preset(input);
             }
         ]]>
     </fx:Script>
 
     <s:VGroup width="100%" gap="8" padding="8">
         <s:Label text="Presets:" fontWeight="bold"/>
-        <s:ComboBox width="100%" id="presetList"
-            dataProvider="{presets}"
-            labelField="name"
-            change="onPresetChanged()"/>
 
         <s:HGroup width="100%" gap="8">
-            <s:Button label="Delete" enabled="{currentPreset &amp;&amp; !readOnlyStatus}"
-                click="onDeleteClick()"/>
-            <s:Button label="Save" click="onSaveClick()"/>
+            <s:ComboBox width="100%" id="presetList"
+                maxChars="{_numChars}"
+                prompt="Type to search or add presets"
+                dataProvider="{_presets}"
+                labelField="name"
+                labelToItemFunction="{_labelToItem}"
+                change="_onPresetChanged()"/>
+
+            <s:Button label="Delete"
+                id="deleteButton"
+                enabled="false"
+                click="_onDeleteClick()"/>
+            <s:Button label="Save"
+                id="saveButton"
+                enabled="false"
+                click="_onSaveClick()"/>
         </s:HGroup>
 
-        <s:TextInput width="100%" id="nameInput" prompt="Enter preset name"/>
-        <s:Label text="{statusMessage}" fontStyle="italic"/>
+        <s:Label text="{_statusMsg}"/>
     </s:VGroup>
 </s:Group>

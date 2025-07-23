@@ -336,7 +336,7 @@ package com.github.ciacob.asrekallibrary {
             // Attempt to actually save the preset to disk. If it fails, is for unknown reasons
             // (-5), as we addressed everything else above. If it succeeds, it is either because
             // of a non existing Preset (1), or an existing and overwritten Preset (2).
-            const fileName:String = preset.hash + "_" + name;
+            const fileName:String = MD5.hash(name);
             const file:File = _homeDir.resolvePath(fileName);
             const result:uint = preset.toDisk(file, true) ? existingPreset ? 2 : 1 : -5;
 
@@ -411,7 +411,12 @@ package com.github.ciacob.asrekallibrary {
             const onSaved:Function = function(e:PresetEvent):void {
                 unbind();
                 if (_lastListed) {
-                    _lastListed.push(preset);
+                    const i:int = _lastListed.indexOf(preset);
+                    if (i === -1) {
+                        _lastListed.push(preset);
+                    } else {
+                        _lastListed[i] = preset;
+                    }
                 }
                 dispatchEvent(new PresetEvent(PresetEvent.SET_COMPLETE, {code: existingPreset ? 2 : 1,
                         preset: preset}));
@@ -425,7 +430,7 @@ package com.github.ciacob.asrekallibrary {
 
             // Listener: executed when listing the known presets completed. Also called directly
             // if a cached list of Presets was already available.
-            const onListingDone:Function = function(...ignore):* {
+            const onListingDone:Function = function(... ignore):* {
                 unbind();
                 existingPreset = lookup(name, _lastListed);
                 if (existingPreset) {
@@ -447,7 +452,7 @@ package com.github.ciacob.asrekallibrary {
                     }
                 }
 
-                const fileName:String = preset.hash + "_" + name;
+                const fileName:String = MD5.hash(name);
                 const file:File = _homeDir.resolvePath(fileName);
                 preset.addEventListener(PresetEvent.SAVED, onSaved);
                 preset.addEventListener(PresetEvent.ERROR, onError);
@@ -521,7 +526,7 @@ package com.github.ciacob.asrekallibrary {
                 return -1;
             }
 
-            const fileName:String = preset.hash + "_" + preset.name;
+            const fileName:String = MD5.hash(preset.name);
             const file:File = _homeDir.resolvePath(fileName);
             try {
                 file.deleteFile(); // Will throw if fails
@@ -601,7 +606,7 @@ package com.github.ciacob.asrekallibrary {
 
             // Listener: executed when listing the known presets completed. Also called directly
             // if a cached list of Presets was already available.
-            const onListingDone:Function = function(...ignore):* {
+            const onListingDone:Function = function(... ignore):* {
                 preset = lookup(nameOrPreset, _lastListed);
                 if (!preset) {
                     dispatchEvent(new PresetEvent(PresetEvent.DELETE_COMPLETE, {code: 0, preset: null}));
@@ -611,7 +616,7 @@ package com.github.ciacob.asrekallibrary {
                     return errOut(-1, "Preset is read-only");
                 }
 
-                const fileName:String = preset.hash + "_" + preset.name;
+                const fileName:String = MD5.hash(preset.name);
                 file = _homeDir.resolvePath(fileName);
                 try {
                     file.addEventListener(Event.COMPLETE, onDeleted);

@@ -199,6 +199,13 @@ package com.github.ciacob.asrekallibrary {
         }
 
         /**
+         * Produces a human readable representation of this Preset instance. Useful for debugging.
+         */
+        override public function toString():String {
+            return "Preset <" + name + ">: " + $settings.toString();
+        }
+
+        /**
          * Saves a serialized form of this Preset to disk, under given name, optionally overriding.
          * @param   file
          *          File to save under. If save is denied (e.g., not writable location), this function
