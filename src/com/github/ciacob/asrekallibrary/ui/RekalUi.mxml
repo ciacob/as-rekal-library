@@ -5,6 +5,19 @@
     xmlns:mx="library://ns.adobe.com/flex/mx"
     width="100%" height="100%">
 
+    <fx:Metadata>
+        [Style(name="headerStyle", type="String", inherit="no")]
+        [Style(name="saveButtonStyle", type="String", inherit="no")]
+        [Style(name="deleteButtonStyle", type="String", inherit="no")]
+        [Style(name="vGap", type="Number", inherit="no")]
+        [Style(name="hGap", type="Number", inherit="no")]
+        [Style(name="paddingLeft", type="Number", inherit="no")]
+        [Style(name="paddingTop", type="Number", inherit="no")]
+        [Style(name="paddingRight", type="Number", inherit="no")]
+        [Style(name="paddingBottom", type="Number", inherit="no")]
+        [Style(name="padding", type="Number", inherit="no")]
+    </fx:Metadata>
+
     <fx:Script>
         <![CDATA[
             import com.github.ciacob.asrekallibrary.Manager;
@@ -14,10 +27,49 @@
             import mx.collections.ArrayCollection;
             
             /**
-             * Set to `true` to have current selection maintained past a Save operation.
+             * Set to `true` to have current selection preserved. past a Save operation.
+             * By default, selection is preserved.
              */
             [Bindable]
             public var keepSelection:Boolean = true;
+            
+            /**
+             * Set to `true` to have the built-in header shown. Set to `false` if you
+             * intend to use your own header. By default, the header is visible.
+             */
+            [Bindable]
+            public var showHeader:Boolean = true;
+            
+            /**
+             * Asset(s) to populate the Delete button with, such as a String to use as
+             * label, or, e.g., if the button skin permits it, an FXG class to use as an
+             * icon.
+             * Note: you can set a different button skin via `deleteButtonStyle`.
+             */
+            [Bindable]
+            public var deleteButtonContent:* = "Delete";
+            
+            /**
+             * Asset(s) to populate the Save button with, such as a String to use as
+             * label, or, e.g., if the button skin permits it, an FXG class to use as an
+             * icon.
+             * Note: you can set a different button skin via `saveButtonStyle`.
+             */
+            [Bindable]
+            public var saveButtonContent:* = "Save";
+            
+            /**
+             * Text to use as the ComboBox prompt displayed when there is no item to
+             * display (either existing or custom).
+             */
+            [Bindable]
+            public var promptText:String = "Type to search or add presets";
+            
+            /**
+             * Text to use as the component's header, provided it is visible.
+             */
+            [Bindable]
+            public var headerText:String = "Presets";
             
             /**
              * Time before status message clears itself, in seconds. Set to 0 to disable.
@@ -276,26 +328,39 @@
         ]]>
     </fx:Script>
 
-    <s:VGroup width="100%" gap="8" padding="8">
-        <s:Label text="Presets:" fontWeight="bold"/>
+    <s:VGroup width="100%" gap="{getStyle('vGap')}"
+        paddingLeft="{getStyle('padding') || 0}"
+        paddingLeft="{getStyle('paddingLeft') || 0}"
+        paddingRight="{getStyle('paddingRight') || 0}"
+        paddingTop="{getStyle('paddingTop') || 0}"
+        paddingBottom="{getStyle('paddingBottom') || 0}">
 
-        <s:HGroup width="100%" gap="8">
+        <s:Label text="{headerText}:"
+            styleName="{getStyle('headerStyle')}"
+            visible="{showHeader}"
+            includeInLayout="{showHeader}"/>
+
+        <s:HGroup width="100%" gap="{getStyle('hGap')}">
             <s:ComboBox width="100%" id="presetList"
                 maxChars="{_numChars}"
-                prompt="Type to search or add presets"
+                prompt="{promptText}"
                 dataProvider="{_presets}"
                 labelField="name"
                 labelToItemFunction="{_labelToItem}"
                 change="_onPresetChanged()"/>
 
-            <s:Button label="Delete"
-                id="deleteButton"
-                enabled="false"
-                click="_onDeleteClick()"/>
-            <s:Button label="Save"
+            <s:Button content="{saveButtonContent}"
                 id="saveButton"
+                styleName="{getStyle('saveButtonStyle')}"
                 enabled="false"
                 click="_onSaveClick()"/>
+
+            <s:Button content="{deleteButtonContent}"
+                id="deleteButton"
+                styleName="{getStyle('deleteButtonStyle')}"
+                enabled="false"
+                click="_onDeleteClick()"/>
+
         </s:HGroup>
 
         <s:Label text="{_statusMsg}"/>
