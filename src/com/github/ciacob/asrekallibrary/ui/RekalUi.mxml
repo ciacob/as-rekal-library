@@ -1,16 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API -->
-<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009"
+<!--- 
+
+Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API 
+
+-->
+<s:Group
+    xmlns:fx="http://ns.adobe.com/mxml/2009"
     xmlns:s="library://ns.adobe.com/flex/spark"
     xmlns:mx="library://ns.adobe.com/flex/mx"
-    width="100%" height="100%">
+    width="100%"
+    height="100%">
 
     <fx:Metadata>
         [Style(name="headerStyle", type="String", inherit="no")]
+        [Style(name="footerStyle", type="String", inherit="no")]
+        [Style(name="comboStyle", type="String", inherit="no")]
         [Style(name="saveButtonStyle", type="String", inherit="no")]
         [Style(name="deleteButtonStyle", type="String", inherit="no")]
+        
         [Style(name="vGap", type="Number", inherit="no")]
         [Style(name="hGap", type="Number", inherit="no")]
+        
         [Style(name="paddingLeft", type="Number", inherit="no")]
         [Style(name="paddingTop", type="Number", inherit="no")]
         [Style(name="paddingRight", type="Number", inherit="no")]
@@ -27,23 +37,23 @@
             import mx.collections.ArrayCollection;
             
             /**
-             * Set to `true` to have current selection preserved. past a Save operation.
-             * By default, selection is preserved.
+             * Set to `true` to have current selection preserved past a Save operation.
+             * This is the default behavior.
              */
             [Bindable]
             public var keepSelection:Boolean = true;
             
             /**
-             * Set to `true` to have the built-in header shown. Set to `false` if you
-             * intend to use your own header. By default, the header is visible.
+             * Set to `true` to have the built-in header shown. This is the default
+             * behavior. Set to `false` if you intend to use your own header instead.
              */
             [Bindable]
             public var showHeader:Boolean = true;
             
             /**
              * Asset(s) to populate the Delete button with, such as a String to use as
-             * label, or, e.g., if the button skin permits it, an FXG class to use as an
-             * icon.
+             * label, or an FXG class to use as an icon (if the button uses the
+             * com.github.ciacob.flex.ui.skins.IconButtonSkin).
              * Note: you can set a different button skin via `deleteButtonStyle`.
              */
             [Bindable]
@@ -51,19 +61,19 @@
             
             /**
              * Asset(s) to populate the Save button with, such as a String to use as
-             * label, or, e.g., if the button skin permits it, an FXG class to use as an
-             * icon.
+             * label, or an FXG class to use as an icon (if the button uses the
+             * com.github.ciacob.flex.ui.skins.IconButtonSkin).
              * Note: you can set a different button skin via `saveButtonStyle`.
              */
             [Bindable]
             public var saveButtonContent:* = "Save";
             
             /**
-             * Text to use as the ComboBox prompt displayed when there is no item to
-             * display (either existing or custom).
+             * Text to use as the ComboBox prompt displayed when there is no current
+             * item (either existing or custom).
              */
             [Bindable]
-            public var promptText:String = "Type to search or add presets";
+            public var promptText:String = "search/add presets...";
             
             /**
              * Text to use as the component's header, provided it is visible.
@@ -77,21 +87,41 @@
             [Bindable]
             public var statusTimeOut:int = 3;
             
+            /**
+             * Optional function to pass to the Manager when retrieving the list of
+             * Presets. If not provided, Presets are grouped by read-only status and
+             * alphabetically sorted.
+             */
+            [Bindable]
+            public var sortingFunction:Function;
+            
+            // The ComboBox data provider.
             [Bindable]
             private var _presets:ArrayCollection = new ArrayCollection;
             
+            // The text to display underneath the ComboBox.
             [Bindable]
             private var _statusMsg:String = "";
             
+            // The maximum number of chars that can be typed in the ComboBox.
+            // This is only to discourage impractically long preset names, The Manager
+            // can accommodate any Preset name.
             [Bindable]
             private var _numChars:uint = 40;
             
+            // The cached storage of the Presets as returned by the Manager.
             private var _rawPresets:Vector.<Preset> = new Vector.<Preset>;
             
+            // The underlying instance of the Manager class that provides preset
+            // management services, as set via `initializeWith()`.
             private var _manager:Manager;
             
+            // A Preset that needs to be set as current in the ComboBox past a
+            // refresh operation (e.g., after Save).
             private var _presetToPersist:Preset;
             
+            // The Timer instance used to discard the status message after a period
+            // of idleness.
             private var _statusTimer:Timer;
             
             /**
@@ -113,6 +143,7 @@
             
             /**
              * Sets status with a delay for auto-clearing itself.
+             * @private
              */
             private function _setStatus(msg:String):void {
                 _statusMsg = msg;
@@ -136,18 +167,18 @@
             
             /**
              * Causes buttons to become available based on specific criteria.
+             * @private
              */
             private function _updateButtons():void {
-                const canDelete:Boolean = (presetList.selectedIndex > ComboBox.CUSTOM_SELECTED_ITEM &&
-                        presetList.selectedItem &&
-                        !presetList.selectedItem.readonly);
-                const canSave:Boolean = !!presetList.selectedItem;
-                deleteButton.enabled = canDelete;
-                saveButton.enabled = canSave;
+                const canWrite:Boolean = (presetList.selectedItem && !presetList.selectedItem.readonly);
+                const exists:Boolean = (presetList.selectedIndex > ComboBox.CUSTOM_SELECTED_ITEM);
+                deleteButton.enabled = (exists && canWrite);
+                saveButton.enabled = canWrite;
             }
             
             /**
              * Helper, trims a string. Returns an empty string for `null`.
+             * @private
              */
             private function _trim(str:String):String {
                 if (!str) {
@@ -157,8 +188,9 @@
             }
             
             /**
-             * Puts read-only presets firsts, alphabetically sorted, then the rest of the presets,
-             * also alphabetically sorted.
+             * Helper, sorts Presets. Places them in two groups, first read-only and then read-write.
+             * Within each group, presets are alphabetically sorted.
+             * @private
              */
             private function _defaultSort(a:Preset, b:Preset):int {
                 const byName:int = a.name.localeCompare(b.name);
@@ -168,18 +200,21 @@
             /**
              * Causes the list to be asynchronously rebuilt, picking up all changes, and
              * optionally restoring previous selection.
+             * @private
              */
             private function _updateList():void {
                 if (!_manager) {
                     return;
                 };
                 _manager.addEventListener(PresetEvent.LIST_COMPLETE, _onListComplete);
-                _manager.listAsync(null, _defaultSort);
+                _manager.listAsync(null, sortingFunction || _defaultSort);
             }
             
             /**
              * Executed when the manager finished its asynchronous listing and we can start
-             * repopulating the ComboBox. We cache received data for synchronous local lookups.
+             * repopulating the ComboBox. We cache received data to use it in synchronous
+             * local lookups.
+             * @private
              */
             private function _onListComplete(e:PresetEvent):void {
                 _manager.removeEventListener(PresetEvent.LIST_COMPLETE, _onListComplete);
@@ -201,6 +236,7 @@
             
             /**
              * Executed when user clicks "Save".
+             * @private
              */
             private function _onSaveClick():void {
                 if (!_manager || !presetList.selectedItem) {
@@ -222,16 +258,17 @@
             }
             
             /**
-             * Executed when the manager has finished asynchronously storing client-provided data.
+             * Executed when the Manager has finished asynchronously storing client-provided data.
+             * @private
              */
             private function _onSaved(e:PresetEvent):void {
             
-                // Safeguard: should not be the case, but should not crash parent application
-                // if anything bad happens.
+                // Safeguard (should not be the case)
                 if (!e || !e.data || !e.data.hasOwnProperty('code') || !e.data.preset) {
                     _setStatus("Internal error while saving.");
                     return;
                 }
+            
                 const data:Object = e.data;
                 const code:int = data.code;
                 const preset:Preset = data.preset;
@@ -257,6 +294,7 @@
             
             /**
              * Executed when user clicks "Delete".
+             * @private
              */
             private function _onDeleteClick():void {
                 if (!_manager || !presetList.selectedItem || presetList.selectedItem.readonly) {
@@ -267,7 +305,8 @@
             }
             
             /**
-             * Executed when manager finished asynchronously deleting given preset.
+             * Executed when manager finished asynchronously deleting given Preset.
+             * @private
              */
             private function _onDelOpExecuted(e:PresetEvent):void {
                 _manager.removeEventListener(PresetEvent.DELETE_COMPLETE, _onDelOpExecuted);
@@ -277,13 +316,14 @@
                     return;
                 }
             
-                // Safeguard: odds are remote, but let's cover that as well.
+                // Safeguard (should not be the case)
                 _setStatus("Preset not found.");
             }
             
             /**
-             * Executed when user causes the currently selected preset to change, either via
+             * Executed when user causes the currently selected Preset to change, either via
              * mouse or keyboard. Sends to the outer world the current Preset.
+             * @private
              */
             private function _onPresetChanged():void {
                 if (!_manager) {
@@ -292,9 +332,6 @@
                 if (presetList.selectedItem) {
             
                     // We only notify the outer world when an *existing* Preset has been selected.
-                    // Otherwise, the user would be unable to save the content of existing Presets
-                    // under new names (because entering the desired new name would instantly replace
-                    // the existing preset's content with the new Preset's, which would be nill).
                     if (presetList.selectedIndex >= 0) {
                         dispatchEvent(new PresetEvent(PresetEvent.CHANGE, presetList.selectedItem, true));
                         _setStatus('Applied preset: ' + presetList.selectedItem.name);
@@ -308,6 +345,7 @@
              * Called by the ComboBox component when it has been committed a free text that it
              * cannot resolve to an existing Preset. We transparently resolve the text to a Preset
              * and return it (to be later subjected to `_onPresetChanged`).
+             * @private
              */
             private function _labelToItem(input:String):* {
                 if (!_manager) {
@@ -320,7 +358,7 @@
                     return null;
                 }
             
-                // Safeguard: maybe component wrongly saw an existing Preset's name as being new...
+                // Safeguard (should not be the case)
                 const existingPreset:Preset = _manager.lookup(input, _rawPresets);
             
                 return existingPreset || new Preset(input);
@@ -328,20 +366,29 @@
         ]]>
     </fx:Script>
 
-    <s:VGroup width="100%" gap="{getStyle('vGap') || 0}"
+    <!-- Outer container -->
+    <s:VGroup width="100%"
+        gap="{getStyle('vGap') || 0}"
         padding="{getStyle('padding') || 0}"
         paddingLeft="{getStyle('paddingLeft') || 0}"
         paddingRight="{getStyle('paddingRight') || 0}"
         paddingTop="{getStyle('paddingTop') || 0}"
         paddingBottom="{getStyle('paddingBottom') || 0}">
 
+        <!-- Built-in optional header -->
         <s:Label text="{headerText}:"
             styleName="{getStyle('headerStyle')}"
             visible="{showHeader}"
             includeInLayout="{showHeader}"/>
 
-        <s:HGroup width="100%" gap="{getStyle('hGap') || 0}">
-            <s:ComboBox width="100%" id="presetList"
+        <!-- ComboBox and buttons -->
+        <s:HGroup width="100%"
+            gap="{getStyle('hGap') || 0}">
+
+            <!-- Searchable list of Presets (and also a place to provide names for new Presets) -->
+            <s:ComboBox width="100%"
+                styleName="{getStyle('comboStyle')}"
+                id="presetList"
                 maxChars="{_numChars}"
                 prompt="{promptText}"
                 dataProvider="{_presets}"
@@ -349,12 +396,14 @@
                 labelToItemFunction="{_labelToItem}"
                 change="_onPresetChanged()"/>
 
+            <!-- Button to save/update Presets -->
             <s:Button content="{saveButtonContent}"
                 id="saveButton"
                 styleName="{getStyle('saveButtonStyle')}"
                 enabled="false"
                 click="_onSaveClick()"/>
 
+            <!-- Button to delete Presets -->
             <s:Button content="{deleteButtonContent}"
                 id="deleteButton"
                 styleName="{getStyle('deleteButtonStyle')}"
@@ -363,6 +412,18 @@
 
         </s:HGroup>
 
-        <s:Label text="{_statusMsg}"/>
+        <!-- Footer -->
+        <s:SkinnableContainer visible="{!!_trim(_statusMsg)}"
+            styleName="{getStyle('footerStyle')}"
+            width="100%">
+
+            <!--  Text with details/feed-back about current operation -->
+            <s:Label text="{_statusMsg}"
+                width="100%"
+                lineBreak="toFit"
+                maxDisplayedLines="-1"
+                />
+        </s:SkinnableContainer>
+
     </s:VGroup>
 </s:Group>
