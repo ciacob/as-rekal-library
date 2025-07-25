@@ -336,6 +336,11 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
                         dispatchEvent(new PresetEvent(PresetEvent.CHANGE, presetList.selectedItem, true));
                         _setStatus('Applied preset: ' + presetList.selectedItem.name);
                     }
+
+                    // UX sugar: assist users in creating new presets
+                    if (presetList.selectedIndex === ComboBox.CUSTOM_SELECTED_ITEM) {
+                        _setStatus('Hint: click Save to create this preset.')
+                    }
                 }
             
                 _updateButtons();
@@ -368,6 +373,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
 
     <!-- Outer container -->
     <s:VGroup width="100%"
+        id="outerContainer"
         gap="{getStyle('vGap') || 0}"
         padding="{getStyle('padding') || 0}"
         paddingLeft="{getStyle('paddingLeft') || 0}"
@@ -394,7 +400,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
                 dataProvider="{_presets}"
                 labelField="name"
                 labelToItemFunction="{_labelToItem}"
-                change="_onPresetChanged()"/>
+                change="_onPresetChanged()" />
 
             <!-- Button to save/update Presets -->
             <s:Button content="{saveButtonContent}"
@@ -415,7 +421,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
         <!-- Footer -->
         <s:SkinnableContainer visible="{!!_trim(_statusMsg)}"
             styleName="{getStyle('footerStyle')}"
-            width="100%">
+            width="{Math.max(outerContainer.width || 0, 80) - 10}">
 
             <!--  Text with details/feed-back about current operation -->
             <s:Label text="{_statusMsg}"
