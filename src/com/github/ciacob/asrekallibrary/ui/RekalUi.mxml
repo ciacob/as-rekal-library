@@ -7,9 +7,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
 <s:Group
     xmlns:fx="http://ns.adobe.com/mxml/2009"
     xmlns:s="library://ns.adobe.com/flex/spark"
-    xmlns:mx="library://ns.adobe.com/flex/mx"
-    width="100%"
-    height="100%">
+    xmlns:mx="library://ns.adobe.com/flex/mx">
 
     <fx:Metadata>
         [Style(name="headerStyle", type="String", inherit="no")]
@@ -95,6 +93,11 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
             [Bindable]
             public var sortingFunction:Function;
             
+            // The `maxWidth` property is rerouted to affect the container of the
+            // ComboBox. It has a default value of 300 pixels.
+            [Bindable]
+            private var _maxContainerWidth:Number = 300;
+            
             // The ComboBox data provider.
             [Bindable]
             private var _presets:ArrayCollection = new ArrayCollection;
@@ -139,6 +142,22 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
                 };
                 this._numChars = manager.labelMaxLength;
                 _updateList();
+            }
+            
+            /**
+             * Sets the maximum width the ComboBox, buttons and the status message can take,
+             * in pixels.
+             */
+            override public function set maxWidth(value:Number):void {
+                _maxContainerWidth = value;
+            }
+            
+            /**
+             * Returns the maximum width the ComboBox, buttons and the status message can take,
+             * in pixels. Default value is 300 pixels.
+             */
+            override public function get maxWidth():Number {
+                return _maxContainerWidth;
             }
             
             /**
@@ -336,10 +355,10 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
                         dispatchEvent(new PresetEvent(PresetEvent.CHANGE, presetList.selectedItem, true));
                         _setStatus('Applied preset: ' + presetList.selectedItem.name);
                     }
-
+            
                     // UX sugar: assist users in creating new presets
                     if (presetList.selectedIndex === ComboBox.CUSTOM_SELECTED_ITEM) {
-                        _setStatus('Hint: click Save to create this preset.')
+                        _setStatus('Hint: click Save to create this preset.');
                     }
                 }
             
@@ -374,6 +393,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
     <!-- Outer container -->
     <s:VGroup width="100%"
         id="outerContainer"
+        maxWidth="{_maxContainerWidth}"
         gap="{getStyle('vGap') || 0}"
         padding="{getStyle('padding') || 0}"
         paddingLeft="{getStyle('paddingLeft') || 0}"
@@ -400,7 +420,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
                 dataProvider="{_presets}"
                 labelField="name"
                 labelToItemFunction="{_labelToItem}"
-                change="_onPresetChanged()" />
+                change="_onPresetChanged()"/>
 
             <!-- Button to save/update Presets -->
             <s:Button content="{saveButtonContent}"
