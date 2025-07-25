@@ -71,7 +71,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
              * item (either existing or custom).
              */
             [Bindable]
-            public var promptText:String = "search/add presets...";
+            public var promptText:String = "Type and press Enter...";
             
             /**
              * Text to use as the component's header, provided it is visible.
