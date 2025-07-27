@@ -35,6 +35,18 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
             import mx.collections.ArrayCollection;
             
             /**
+             * Tooltip to use for the "Save button".
+             */
+            [Bindable]
+            public var saveTooltip:String = "Save preset to disk";
+
+            /**
+             * Tooltip to use for the "Delete button".
+             */
+            [Bindable]
+            public var deletionTooltip:String = "Delete preset from disk";
+            
+            /**
              * Set to `true` to have current selection preserved past a Save operation.
              * This is the default behavior.
              */
@@ -425,6 +437,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
             <!-- Button to save/update Presets -->
             <s:Button content="{saveButtonContent}"
                 id="saveButton"
+                toolTip="{saveTooltip}"
                 styleName="{getStyle('saveButtonStyle')}"
                 enabled="false"
                 click="_onSaveClick()"/>
@@ -432,6 +445,7 @@ Minimal, UI-agnostic Preset Manager UI, consuming Rekal's Manager API
             <!-- Button to delete Presets -->
             <s:Button content="{deleteButtonContent}"
                 id="deleteButton"
+                toolTip="{deletionTooltip}"
                 styleName="{getStyle('deleteButtonStyle')}"
                 enabled="false"
                 click="_onDeleteClick()"/>
